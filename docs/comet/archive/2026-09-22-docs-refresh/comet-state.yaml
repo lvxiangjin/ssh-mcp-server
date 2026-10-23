@@ -1,0 +1,137 @@
+schema: comet.native.v4
+name: docs-refresh
+language: zh-CN
+phase: archive
+status: done
+state_version: 9
+brief: brief.md
+shape_confirmation_hash: b8b43848b599df709a0e0404b2cd16790014cefb622b83fc9321c3abb951bd75
+spec_changes: []
+workspace:
+  isolation: worktree
+  change_branch: comet/docs-refresh
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1：上述 4 处过期引用全部更新，grep 全仓不再有"四个工具/（run_command / upload_file /
+      download_file / list_servers）"式的旧工具清单残留；
+    result: passed
+    reason:
+      text: grep 断言三份目标文档中'四个工具'与旧四工具括号列表均为 0 处残留；HEAD diff 确认三处已改为'六个 MCP
+        工具/六个工具'+两流式端点表述（README.md:184-186、使用说明.md:168、开发需求文档.md:107）
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2：README 大文件章节含 GET /download 用法；
+    result: passed
+    reason:
+      text: README.md:160 章节标题'大文件上传 / 下载（流式端点）'；:175-179 含 GET /download curl 示例与
+        X-Md5/X-File-Size 响应头说明，:19 特性列表同步列出
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3：CHANGELOG [未发布] 小节完整覆盖 gateway-usability 变更点。
+    result: passed
+    reason:
+      text: CHANGELOG.md:5 存在'## [未发布]'小节，七项全覆盖：check_job/kill_job、GET
+        /download、cwd、审计 result 摘要、智能截断、setup-limited-user.sh、黑名单加固
+      truncated: false
+builder_handoff:
+  candidate_id: 1f32d054-86ad-4a86-b355-24204485e4d2
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:efbd9227-3c28-47d0-8b41-d7961295f01f
+  iteration: 1
+  summary:
+    text: 纯文档巡检变更：三处'四个工具'陈旧引用更新为六工具+两流式端点现状（README 安全组说明、使用说明 §4.4、开发需求文档
+      FR6）；README 大文件章节更名'上传/下载'并补 GET /download 示例；CHANGELOG 新增 [未发布] 小节完整记录
+      gateway-usability 变更（后台任务/check_job/kill_job/GET /download/cwd/审计
+      result/智能截断/setup 脚本/黑名单加固）。零功能代码改动。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+  checks:
+    - name:
+        text: grep 断言：旧工具清单引用清零
+        truncated: false
+      result: passed
+      note:
+        text: 三个 md 文件中'四个工具'与旧 4 工具括号列表 0 处残留（编辑前 4 处）
+        truncated: false
+    - name:
+        text: CHANGELOG [未发布] 段
+        truncated: false
+      result: passed
+      note:
+        text: 存在且含 check_job、/download、cwd、审计 result、setup-limited-user.sh 关键词
+        truncated: false
+    - name:
+        text: README /download 示例
+        truncated: false
+      result: passed
+      note:
+        text: 大文件章节含 curl GET /download 用法与 X-Md5/X-File-Size 说明
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 纯文档变更，按协议跳过预审复核（可选项）
+      truncated: false
+  known_limits_truncated: false
+  review: null
+  submitted_at: 2026-09-22T07:56:52.594Z
+blockers: []
+verification:
+  candidate_id: 1f32d054-86ad-4a86-b355-24204485e4d2
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:8677b09d-0d6c-487e-867b-c2aa3392c20d
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 候选提交 4dbd74d 为纯文档变更：三处旧四工具引用清零并更新为六工具+两流式端点现状，README 大文件章节含 GET /download
+      用法，CHANGELOG [未发布] 小节七项全覆盖，A1-A3 全部通过。
+    truncated: false
+  risks: []
+  risks_truncated: false
+  completed_at: 2026-09-22T08:00:09.560Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 候选提交 4dbd74d 为纯文档变更：三处旧四工具引用清零并更新为六工具+两流式端点现状，README 大文件章节含 GET /download
+        用法，CHANGELOG [未发布] 小节七项全覆盖，A1-A3 全部通过。
+      truncated: false
+    completed_at: 2026-09-22T08:00:09.560Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-22T07:51:45.083Z

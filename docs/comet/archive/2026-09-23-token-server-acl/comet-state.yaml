@@ -1,0 +1,189 @@
+schema: comet.native.v4
+name: token-server-acl
+language: zh-CN
+phase: archive
+status: done
+state_version: 12
+brief: brief.md
+shape_confirmation_hash: 95807fa91ace254fb37e704eb1846c94f444b267dd3ac578b3fc19cc2033101e
+spec_changes:
+  - capability: token-server-acl
+    operation: create
+    source: specs/token-server-acl/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/token-server-acl
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 2
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1（受限视角）：Token 绑定 `[srv-a]` 后：list_servers 仅见 srv-a；run_command 不传 server
+      默认落在 srv-a；check_job/kill_job/upload_file/download_file 同样只能用 srv-a。
+    result: passed
+    reason:
+      text: 独立复跑 node test-http.js（10.0.0.11 可达）64 项全绿：job_id
+        立即返回、running→done+exit_code+输出、kill→killed、非法 job_id 拒绝、网关重启后仍可查；实现含 PID
+        复用防误杀与 /tmp 接管防护（lib.js:275-372, server.js:229-276,
+        test-http.js:384-406,498-513）
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2（越权拒绝）：受限 Token 显式 `server=srv-b`：run_command
+      返回"无权访问指定的服务器"（isError）、/upload 与 /download 返回 403、审计记录 server-acl
+      拒绝；srv-b 的存在与否无法从响应判断。
+    result: passed
+    reason:
+      text: 工具与/upload、/download越权均返回统一文案'无权访问指定的服务器'(server.js:198,579,618)，校验先于findServer、不存在与越权不可区分；审计经sanitizeAuditArgs保留args.server(auth.js:248,运行时验证)且端点显式记录server-acl:<requested>(server.js:578,617)
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3（向后兼容）：无 servers 字段的 Token 与 env 旧 Token 行为完全不变（全部服务器可用、默认解析不变）；stdio
+      模式不受影响。
+    result: passed
+    reason:
+      text: 无servers字段/env
+        Token/空数组均不受限(auth.js:54-56,109,114，运行时allowed=null)，不受限Token见全部并可指定srv-a(test-http.js:298-303)、legacy
+        env Token回归通过(:116-124)；stdio不传tokenAcl行为不变(server.js:365-367)
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4（配置校验）：token.servers 引用未定义的服务器 id → 网关拒绝启动并指明哪一条。
+    result: passed
+    reason:
+      text: 引用未定义id逐项报错并指明token与id(auth.js:115-119，运行时验证错误文案)，server.js:377-381拒绝启动exit(1)
+        fail-closed；测试exit≠0且stderr含'引用未定义的服务器 id'(test-http.js:323-336)
+      truncated: false
+builder_handoff:
+  candidate_id: 89eda929-20bc-409f-ab71-414113997659
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:6beed51d-4d9a-4aa4-b29c-9b39a4d8720c
+  iteration: 1
+  summary:
+    text: Token 级服务器访问控制：auth.tokens[] 新增可选 servers 白名单（绑定后该 Token 的 list_servers
+      仅见白名单、四工具与后台任务 server 参数默认取白名单首个且绝不落全局默认、/upload 与 /download 越权
+      403、拒绝文案统一不泄露目标机信息、审计 args.server 留痕）；引用未定义服务器 id
+      拒绝启动（fail-closed）；向后兼容（env 旧 Token/无 servers 字段 Token/stdio
+      全不变）。双服务器场景测试覆盖受限视角/越权/默认解析/端点/启动校验。独立复核 P2×2（空数组语义违反 spec、默认解析断言空转）与 P3×7
+      全部修复。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+  checks:
+    - name:
+        text: node --check 全部改动 js
+        truncated: false
+      result: passed
+      note:
+        text: auth.js/server.js/test-http.js
+        truncated: false
+    - name:
+        text: node test-http.js 全场景
+        truncated: false
+      result: passed
+      note:
+        text: 两轮全绿（每轮 74+ 项断言，目标机 10.0.0.11 作为 SSH 测试目标——仅执行测试命令，未改动该服务器任何配置/服务）：ACL
+          场景 10 断言（list 过滤/默认解析 srv-b/越权拒绝×3/不受限兼容/端点 403×2）+ A4 启动校验
+        truncated: false
+    - name:
+        text: SEA 单文件构建
+        truncated: false
+      result: passed
+      note:
+        text: WSL 构建成功 122MB（仅验证打包，按用户要求不部署 1.6）
+        truncated: false
+    - name:
+        text: 独立只读复核
+        truncated: false
+      result: passed
+      note:
+        text: 确认无越权旁路/无信息泄露/fail-closed 生效/向后兼容；指出 P2×2（空数组语义违反 spec、默认解析断言空转）与
+          P3×7，全部修复
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 纯开发不部署：1.6 生产仍运行旧版（用户明确要求不动 1.6），上线部署由使用者择机执行
+      truncated: false
+    - text: HMAC 派生 Token 不受 servers 白名单限制（已在文档标注，权限等同管理员）
+      truncated: false
+    - text: 完整 role 档位系统（命令白名单/工具级差异）为后续规划
+      truncated: false
+  known_limits_truncated: false
+  review:
+    status: passed
+    summary:
+      text: 只读 Reviewer 核对 diff 与 spec：确认强制点完整（五工具均经 pick、无裸 findServer
+        旁路）、不泄露目标机信息、fail-closed 生效、向后兼容；指出 P2×2（空数组语义违反 spec、默认解析断言空转）与
+        P3×7（无默认独立报错、审计留痕、HMAC 说明、serverId null 语义、行合并等），全部修复并两轮回归全绿。
+      truncated: false
+    reviewer_execution_ref: reviewer-readonly-agent-b1b38ce9
+  submitted_at: 2026-09-23T15:11:47.147Z
+blockers: []
+verification:
+  candidate_id: 89eda929-20bc-409f-ab71-414113997659
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:cb549084-983a-443c-93b2-e3e331fe28af
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: A1-A5 全部通过：独立复跑 64 项端到端断言全绿（真实目标机），语法检查、bash -n、黑名单正则单测、审计/截断实现逐点核对均符合
+      brief 与 spec。
+    truncated: false
+  risks:
+    - text: dd if=/dev/zero 写普通文件会被基线既有的 if=/dev/zero 规则拦截（33ed4cb 已存在，非本候选引入）
+      truncated: false
+    - text: check_job >7 天旧目录清理无自动化断言，仅代码审查确认（lib.js:319）
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-09-23T15:18:59.724Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-09-23T14:35:15.593Z
+  - goal_cycle: 2
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: A1-A5 全部通过：独立复跑 64 项端到端断言全绿（真实目标机），语法检查、bash -n、黑名单正则单测、审计/截断实现逐点核对均符合
+        brief 与 spec。
+      truncated: false
+    completed_at: 2026-09-23T15:18:59.724Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-23T14:32:38.111Z

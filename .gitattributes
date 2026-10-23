@@ -1,0 +1,3 @@
+# shell 脚本必须保持 LF：Windows 检出（core.autocrlf=true）转 CRLF 会导致
+# bash scripts/build-linux.sh 等在 Linux/WSL 下报 $'\r': command not found
+*.sh text eol=lf

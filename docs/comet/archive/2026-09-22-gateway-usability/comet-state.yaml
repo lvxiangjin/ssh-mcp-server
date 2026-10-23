@@ -1,0 +1,202 @@
+schema: comet.native.v4
+name: gateway-usability
+language: zh-CN
+phase: archive
+status: done
+state_version: 9
+brief: brief.md
+shape_confirmation_hash: 33815dfbd38535280b7c218010971bb3aea4e74688286ef413c13991bf451bf2
+spec_changes:
+  - capability: gateway-usability
+    operation: create
+    source: specs/gateway-usability/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/gateway-usability
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1（后台任务）：`run_command{background:true, command:"sleep 6 && echo
+      JOB_DONE"}` 立即返回 job_id；期间 `check_job` 报 running 且能看到输出尾；完成后报
+      done、exit_code 0、含 JOB_DONE；对 `sleep 300` 任务 `kill_job` 后
+      state=killed；网关重启后 `check_job` 仍可查询同一 job_id。
+    result: passed
+    reason:
+      text: 独立复跑 node test-http.js（10.0.0.11 可达）64 项全绿：job_id
+        立即返回、running→done+exit_code+输出、kill→killed、非法 job_id 拒绝、网关重启后仍可查；实现含 PID
+        复用防误杀与 /tmp 接管防护（lib.js:275-372, server.js:229-276,
+        test-http.js:384-406,498-513）
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2（cwd）：`run_command{cwd:"/etc", command:"pwd"}` 输出
+      `/etc`；`cwd:"/no/such/dir"` 时返回明确 shell 错误。
+    result: passed
+    reason:
+      text: cd 前缀单引号安全包裹（lib.js:167）；实测 cwd=/etc+pwd 输出 /etc、无效 cwd→shell exit_code
+        1（test-http.js:378-381）
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3（流式下载）：先经 /upload 传 8MB 随机数据，`GET /download?path=同路径` 收到的字节数与 sha256/md5
+      与原文件一致（响应头 `X-Md5`/`X-File-Size` 正确）；`/download` 敏感路径 400、无 token 401；审计出现
+      `download_stream` 条目。
+    result: passed
+    reason:
+      text: 8MB /download 字节与 sha256 一致、X-Md5/X-File-Size 头正确、敏感路径 400、无 token 401
+        且计入防爆破、审计 download_stream 全路径覆盖（lib.js:594-653, server.js:455,571-604,
+        test-http.js:441-473,481-482）
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4（安全加固）：`scripts/setup-limited-user.sh` 存在且 `bash -n` 通过、含 sudo 白名单与
+      config.json 建议输出；默认黑名单下 `dd if=/dev/zero of=/dev/sda` 与 `chmod -R 777 /`
+      被拦截并返回命中规则。
+    result: passed
+    reason:
+      text: setup-limited-user.sh 存在且 bash -n 通过、sudoers 4 条全部强制 --no-pager 并 visudo
+        自校验（scripts/setup-limited-user.sh:30-35）；dd of=/dev/sd* 与 chmod -R 777 /
+        均拦截返回命中规则（config.json:30,34-35, test-http.js:372-375），另 10 例独立正则单测无误伤
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: A5（审计与截断）：审计条目含 `result` 摘要字段（≤ 上限，超长带省略标记，`resultChars:0` 可关）；产出 >64KB
+      输出的命令响应包含开头与结尾内容且带 `…[中间省略 N 字节]…` 标记、`truncated=true`。
+    result: passed
+    reason:
+      text: 审计 result 摘要头 1024+尾 256 带省略标记、resultChars=0
+        关闭路径实测生效（server.js:383-394,486-489, test-http.js:239,484）；>64KB 输出保留头
+        60%+尾 40% 并带中间省略标记与 truncated/omittedBytes，实测 200KB
+        首尾标记同现（lib.js:206-238, test-http.js:409-417）
+      truncated: false
+builder_handoff:
+  candidate_id: a5ba2825-2578-4963-b9aa-bad4e954d34f
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:cbcc17b0-6f6f-4e9d-b56e-daa7360ec9f0
+  iteration: 1
+  summary:
+    text: 五点易用性补强：P1 后台任务（run_command background 参数 + check_job/kill_job
+      新工具，状态文件落目标机 /tmp/.ssh-mcp-jobs/，网关重启可查，check 顺带清 7 天旧目录）；P2 GET /download
+      流式下载（SFTP 读流直透，X-Md5/X-File-Size 头，鉴权/防爆破/黑名单/审计全套，download_stream
+      审计条目）；P3 run_command cwd 参数；P4 scripts/setup-limited-user.sh
+      低权限账号脚本（sudoers 强制 --no-pager 防 pager 逃逸）+ 默认黑名单补 dd of=/dev/sd* 与 chmod
+      -R 777 /；P5 审计 result 摘要（头 1024+尾 256，resultChars 可调可关，启动校验）+ 输出智能截断（头
+      60%+尾 40%，超上限才启用）。独立复核 P2×4/P3×11 全部修复。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+  checks:
+    - name:
+        text: node --check 全部改动 js + bash -n 脚本
+        truncated: false
+      result: passed
+      note:
+        text: lib.js/server.js/auth.js/test-http.js/setup-limited-user.sh
+        truncated: false
+    - name:
+        text: node test-http.js 全场景
+        truncated: false
+      result: passed
+      note:
+        text: 64 项断言连跑两轮全绿（目标机 10.0.0.11 真实服务器）：后台任务全生命周期含网关重启后可查、cwd 成功与失败、8MB 下载
+          sha256/X-Md5 一致、截断头尾标记、审计 result 字段与 resultChars=0 关闭路径、防爆破计数含
+          /download
+        truncated: false
+    - name:
+        text: SEA 单文件构建
+        truncated: false
+      result: passed
+      note:
+        text: WSL 构建成功 122MB
+        truncated: false
+    - name:
+        text: 独立只读复核
+        truncated: false
+      result: passed
+      note:
+        text: P2×4（截断 60-100% 假标记回归、sudoers pager 逃逸提权、kill_job PID 复用误杀、/tmp 任务目录接管）+
+          P3×11 全部修复并回归
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 后台命令须 POSIX 兼容（bash 存在时用 bash，否则 sh）
+      truncated: false
+    - text: 3GB 级真实下载的实机测速在部署后执行（本地仅 8MB 级自动化）
+      truncated: false
+    - text: 低权限账号切换生产配置为使用者自决（脚本只落地账号）
+      truncated: false
+  known_limits_truncated: false
+  review:
+    status: passed
+    summary:
+      text: 只读 Reviewer 核对 spec 与 diff：确认黑名单前缀无绕过、/download 401 计入防爆破、shq 转义正确、job_id
+        闭环、审计 0 关闭路径、向后兼容；指出 P2×4（截断假标记回归、sudoers pager 逃逸、kill_job PID
+        复用误杀、/tmp 目录接管写穿）与 P3×11（find 边界、tail_lines
+        取整、输出字节兜底、bashism、下载看门狗、bytes 统计、error 摘要、resultChars
+        校验、审计白名单、状态码映射、测试缺口），全部修复后连跑两轮 64 项全绿。
+      truncated: false
+    reviewer_execution_ref: reviewer-readonly-agent-cdf0040e
+  submitted_at: 2026-09-22T07:04:06.670Z
+blockers: []
+verification:
+  candidate_id: a5ba2825-2578-4963-b9aa-bad4e954d34f
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:12c30188-ba38-46f0-9698-2e898025c89e
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: A1-A5 全部通过：独立复跑 64 项端到端断言全绿（真实目标机），语法检查、bash -n、黑名单正则单测、审计/截断实现逐点核对均符合
+      brief 与 spec。
+    truncated: false
+  risks:
+    - text: dd if=/dev/zero 写普通文件会被基线既有的 if=/dev/zero 规则拦截（33ed4cb 已存在，非本候选引入）
+      truncated: false
+    - text: check_job >7 天旧目录清理无自动化断言，仅代码审查确认（lib.js:319）
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-09-22T07:09:37.849Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: A1-A5 全部通过：独立复跑 64 项端到端断言全绿（真实目标机），语法检查、bash -n、黑名单正则单测、审计/截断实现逐点核对均符合
+        brief 与 spec。
+      truncated: false
+    completed_at: 2026-09-22T07:09:37.849Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-22T06:09:00.589Z

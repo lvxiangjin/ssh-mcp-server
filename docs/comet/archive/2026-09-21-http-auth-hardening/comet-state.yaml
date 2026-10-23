@@ -1,0 +1,219 @@
+schema: comet.native.v4
+name: http-auth-hardening
+language: zh-CN
+phase: archive
+status: done
+state_version: 12
+brief: brief.md
+shape_confirmation_hash: 298032f2396732ca550d4f501ca2656369eb036edb52bd9dbe4cac73e3c48d6a
+spec_changes:
+  - capability: http-auth
+    operation: create
+    source: specs/http-auth/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/http-auth-hardening
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 2
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1（向后兼容）：未配置 `auth` 段、仅设置 `SSH_MCP_TOKEN` 的部署升级后行为不变——正确 Token 可正常调用，缺失/错误
+      Token 返回 401；完全不设置任何凭据时 HTTP 模式拒绝启动。
+    result: passed
+    reason:
+      text: 独立复跑 node test-http.js 确认：仅 SSH_MCP_TOKEN 部署错误 Token 401/正确 Token
+        可用，无任何凭据时非零退出并打印拒绝启动（server.js:275-281）。
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2（多 Token 与过期）：配置 Token A（有效）与 Token B（`expiresAt` 已过）：A 可调用全部 4 个工具；B 返回
+      401；服务端日志/审计记录能区分 A 与 B 的身份。
+    result: passed
+    reason:
+      text: 有效 Token 调用成功、expiresAt 已过与 disabled 均 401，审计按 tokenId=alice/hmac
+        与失败指纹区分身份（auth.js:145-151）。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3（HMAC 自动轮换）：用 `scripts/derive-token.js` 由 master secret 推导当前桶 Token
+      可通过鉴权；前一桶（宽容窗内）可通过；更早桶返回 401；篡改 Token 中桶字段或 hex 部分返回 401。
+    result: passed
+    reason:
+      text: derive-token.js CLI 推导当前桶/±1 宽容桶通过、cur-2 越界与篡改 hex 401，--at 输出与 auth.js
+        库函数逐字节一致（auth.js:129-140）。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4（防爆破）：同一来源 IP 在窗口内连续达到失败阈值（默认 10 次/60 秒）后，后续请求返回 429 +
+      `Retry-After`，封禁期（默认 10 分钟）内即使携带正确 Token 也返回 429；封禁期结束后恢复。
+    result: passed
+    reason:
+      text: 失败达阈值后 429+Retry-After、封禁期正确 Token
+        同拒、到期自动解除（server.js:305-316，auth.js:157-187）。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: A5（审计日志）：显式开启 `audit.enabled` 后，每次 `/mcp` 工具调用（成功或失败）与每次鉴权失败尝试，都在
+      `audit-YYYY-MM-DD.log` 产生一条 JSONL 记录，包含时间、来源 IP、Token 身份（鉴权失败标记 invalid +
+      指纹前 8 位）、工具名、命令/路径全文、结果 ok/error；`/healthz` 与 429 拒绝不产生审计记录。
+    result: passed
+    reason:
+      text: 审计 JSONL 完整、鉴权失败 9/9 条、429 与 /healthz 零记录、失败仅记 8 位指纹、无 Token 原值与
+        content_base64（auth.js:191-219）。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: A6（信息不泄露）：鉴权失败响应统一为 401 `unauthorized`，无法从响应区分"Token 不存在 / 已过期 / 已禁用 /
+      HMAC 桶越界"。
+    result: passed
+    reason:
+      text: 四种失败响应体逐一比对完全一致，唯一 401 出口统一 code=-32001 unauthorized（server.js:334-336）。
+      truncated: false
+  - id: A7
+    source: brief.md
+    text: A7（审计默认关闭）：未配置 `audit` 或 `audit.enabled=false` 时不创建审计目录、不写任何审计文件，其余功能不受影响。
+    result: passed
+    reason:
+      text: audit.enabled=false 时空实现不做 mkdir，实测无任何审计目录/文件产生（auth.js:200）。
+      truncated: false
+builder_handoff:
+  candidate_id: c1aff7c7-c849-40f4-8909-437fe73ae047
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:705e1fbc-393c-4a62-a6b1-01408c23b51e
+  iteration: 1
+  summary:
+    text: HTTP 模式鉴权增强：新增 auth.js（三类凭据校验：env/多静态 Token 带 id+expiresAt+disabled/HMAC
+      派生自动轮换；滑动窗口限速与 IP 封禁；JSONL 审计默认关闭）；server.js HTTP 分支重构（封禁 429 → 统一 401 →
+      /mcp，TRUST_PROXY 取真实 IP，启动打印凭据来源与 HMAC 时间桶）；scripts/gen-token.js 与
+      derive-token.js（与网关同源实现）；零新增依赖；完全向后兼容 SSH_MCP_TOKEN 单 Token
+      部署；README/使用说明/开发需求文档同步。独立只读复核发现 P2×2/P3×4 全部修复并回归。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
+  checks:
+    - name:
+        text: node --check 全部新增/修改 js
+        truncated: false
+      result: passed
+      note:
+        text: auth.js/server.js/lib.js/test-http.js/scripts/*
+        truncated: false
+    - name:
+        text: node test-http.js 全场景
+        truncated: false
+      result: passed
+      note:
+        text: Windows 本地 33 项检查全绿（连跑 3 轮），覆盖 A1-A7 可自动化断言，含 WSL 真实 SSH 四工具完整流程
+        truncated: false
+    - name:
+        text: SEA 单文件构建
+        truncated: false
+      result: passed
+      note:
+        text: WSL Node22 bash scripts/build-linux.sh 产出 122MB；新增 .gitattributes 防 CRLF
+          损坏构建脚本
+        truncated: false
+    - name:
+        text: 实机部署验证（10.0.0.11 CentOS8）
+        truncated: false
+      result: passed
+      note:
+        text: SEA 二进制实跑：17 项全链路（四工具真实 SSH/统一 401/HMAC 桶边界/429 封禁周期/审计文件核验）+ 12 项修复点定向（/
+          不计数、坏 expiresAt fail-closed、非法配置拒启）；测试后现场已清理，旧生产服务未动
+        truncated: false
+    - name:
+        text: 独立只读复核
+        truncated: false
+      result: passed
+      note:
+        text: 发现 P2×2（限速计数范围、expiresAt fail-open）与 P3×4，全部修复并回归测试
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: SSH_MCP_TRUST_PROXY=1 的真实 Nginx 反代链路未实测（本机无反代环境），代码路径经本地与逻辑验证
+      truncated: false
+    - text: 限速/封禁状态为进程内存，重启清空（brief D4 已接受）
+      truncated: false
+    - text: "目标机旧生产网关 /opt/ssh-mcp（127.0.0.1:18080，systemd:
+        ssh-mcp）仍运行旧版，升级需用户决定（替换二进制+重启）"
+      truncated: false
+  known_limits_truncated: false
+  review:
+    status: passed
+    summary:
+      text: 只读 Reviewer 独立复核 diff 与规格：确认 HMAC 常量时间比较、桶窗口闭区间、401 响应逐字节一致、healthz
+        绕过、向后兼容等价、审计白名单与指纹不可逆；发现并推动修复 6 项（P2-1 限速计数超出 spec 范围、P2-2 expiresAt
+        解析失败 fail-open、P3-1 配置校验缺失、P3-2 审计 mkdir 失败语义显式化、P3-3 弱 secret 告警、P3-4
+        测试环境隔离），修复后全量回归通过。
+      truncated: false
+    reviewer_execution_ref: reviewer-readonly-agent-ca2f14a1
+  submitted_at: 2026-09-21T10:57:44.061Z
+blockers: []
+verification:
+  candidate_id: c1aff7c7-c849-40f4-8909-437fe73ae047
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:14afc12e-3555-439f-a898-ab03fff07d52
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 独立运行 node test-http.js 33 项断言全绿（含完整 SSH 流程），并经 CLI 一致性复算与 fail-closed
+      抽查，A1-A7 全部有代码与实测证据支持，验收通过。
+    truncated: false
+  risks: []
+  risks_truncated: false
+  completed_at: 2026-09-21T11:05:35.838Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-09-21T10:56:40.867Z
+  - goal_cycle: 2
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 独立运行 node test-http.js 33 项断言全绿（含完整 SSH 流程），并经 CLI 一致性复算与 fail-closed
+        抽查，A1-A7 全部有代码与实测证据支持，验收通过。
+      truncated: false
+    completed_at: 2026-09-21T11:05:35.838Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-21T09:49:33.717Z

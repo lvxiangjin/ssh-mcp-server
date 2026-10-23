@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      # lib.js 在模块加载时就会读取 config.json，先写入测试配置
+      - name: Point config.json at the local sshd
+        run: |
+          node -e "
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('config.example.json', 'utf8'));
+          cfg.servers[0] = { id: 'self', name: 'ci-target', host: '127.0.0.1', port: 22, username: process.env.USER, privateKeyPath: '~/.ssh/id_ed25519' };
+          cfg.defaults = { ...cfg.defaults, serverId: 'self' };
+          fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2));
+          "
+
+      # 不依赖 SSH 的纯函数检查（黑名单/限流器/CIDR 匹配）
+      - name: Pure-function checks
+        run: node scripts/check-v04.mjs
+
+      # 在 runner 上起一个本地 sshd 作为测试目标机（与生产同构：真实 SSH + SFTP）
+      - name: Start local sshd as test target
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openssh-server
+          sudo ssh-keygen -A
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd
+          ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$USER@127.0.0.1" 'echo sshd ready'
+
+      - name: Direct SSH core test
+        run: node test-direct.js
+
+      - name: stdio MCP protocol test
+        run: node test-mcp.js
+
+      - name: HTTP gateway test suite
+        run: node test-http.js

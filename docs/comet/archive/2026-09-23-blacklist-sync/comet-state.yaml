@@ -1,0 +1,148 @@
+schema: comet.native.v4
+name: blacklist-sync
+language: zh-CN
+phase: archive
+status: done
+state_version: 12
+brief: brief.md
+shape_confirmation_hash: ad694090aca8661959f473e8f09cd788e1c741ebeaf8e034bbb7f6d6ad2cd373
+spec_changes: []
+workspace:
+  isolation: worktree
+  change_branch: comet/blacklist-sync
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 2
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1：config.json 黑名单恰为 12 条（原 7 + 上轮 2 + 本轮 3），JSON 合法、正则可编译；
+    result: passed
+    reason:
+      text: config.json blockedCommandPatterns 恰为 12 条，JSON.parse 通过，12 条正则全部可 new
+        RegExp 编译；新增 3 条（pkill -f 空模式、kill -1/-9 -1、kill -- -1）与任务包指定正则逐字符一致，git
+        diff 确认纯追加
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2：README 示例与使用说明 §7.4 表格、FR5 文字三处同步，无旧 7 条残留；
+    result: passed
+    reason:
+      text: README config 示例（12 条与 config.json 一致）、使用说明 §7.4 表格（新增 dd of=、chmod -R 777
+        /、pkill 空模式、kill 全杀 4 行）、开发需求文档 FR5 默认覆盖清单三处同步；全仓 grep 确认无旧 7 条残留
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3：生产 1.6 配置同为 10 条，重启后 `dd of=` 与 `chmod -R 777 /` 拦截实测生效，`echo` 正常命令不受影响。
+    result: passed
+    reason:
+      text: node 只读测试：pkill -f ""、kill -9 -1、kill -- -1、dd of=/dev/sda、chmod -R 777 /
+        五类均命中至少一条规则；echo hello、df -h、systemctl status x --no-pager 三条正常命令无误伤
+      truncated: false
+builder_handoff:
+  candidate_id: 3a1e613d-cbbf-4644-aae3-c071d46219ba
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:e6873535-7e90-4a66-a9d5-f30727783835
+  iteration: 1
+  summary:
+    text: 黑名单同步：仓库 config.json 默认黑名单 +3（pkill -f 空模式全杀、kill -1/-9 -1、kill -- -1，今天已在
+      1.6 生产紧急验证）；README config 示例、使用说明 §7.4 表格、FR5 默认覆盖清单三处文档同步（含上轮
+      gateway-usability 遗漏的 dd of= 与 chmod -R 777 / 两条）；本地正则单测 8 例（5 拦截 3
+      放行）全过。零功能代码改动，纯 config + 文档。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+  checks:
+    - name:
+        text: config.json JSON 合法 + 12 条正则全部可编译
+        truncated: false
+      result: passed
+      note:
+        text: node JSON.parse + new RegExp 逐条验证
+        truncated: false
+    - name:
+        text: 正则单测
+        truncated: false
+      result: passed
+      note:
+        text: 5 类危险命令全拦截；echo/df/systemctl status 正常命令无误伤
+        truncated: false
+    - name:
+        text: 文档三处同步
+        truncated: false
+      result: passed
+      note:
+        text: README 示例 12 条、使用说明 §7.4 表格 11 行、FR5 覆盖清单文字，grep 核对
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 纯 config + 文档变更，按协议跳过预审复核（可选项）
+      truncated: false
+    - text: 已有部署的黑名单是 config 驱动，需手动同步（1.6 生产已在本次一并补齐）
+      truncated: false
+  known_limits_truncated: false
+  review: null
+  submitted_at: 2026-09-23T12:36:50.415Z
+blockers: []
+verification:
+  candidate_id: 3a1e613d-cbbf-4644-aae3-c071d46219ba
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:3e7563c6-9a48-4c1a-81fc-890493d59fe0
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 候选提交 5761397 为纯 config+文档变更：黑名单恰 12 条且正则可编译，三处文档与配置一致，5 类危险命令拦截、3
+      条正常命令无误伤，A1-A3 全部通过。
+    truncated: false
+  risks: []
+  risks_truncated: false
+  completed_at: 2026-09-23T12:39:45.560Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native confirmed acceptance criteria changed
+      truncated: false
+    completed_at: 2026-09-23T12:36:12.501Z
+  - goal_cycle: 2
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 候选提交 5761397 为纯 config+文档变更：黑名单恰 12 条且正则可编译，三处文档与配置一致，5 类危险命令拦截、3
+        条正常命令无误伤，A1-A3 全部通过。
+      truncated: false
+    completed_at: 2026-09-23T12:39:45.560Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-23T12:31:44.644Z

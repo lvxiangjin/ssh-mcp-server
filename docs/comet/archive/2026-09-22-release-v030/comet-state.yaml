@@ -1,0 +1,141 @@
+schema: comet.native.v4
+name: release-v030
+language: zh-CN
+phase: archive
+status: done
+state_version: 9
+brief: brief.md
+shape_confirmation_hash: 83c7fdc897696b7c519e041163c0c43e926d7a9c6fb2b0b610a4f45b7d2a45fb
+spec_changes:
+  - capability: release
+    operation: create
+    source: specs/release/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/release-v030
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1：`package.json` 的 version 为 `0.3.0`，与 `server.js` MCP Server 元数据一致。
+    result: passed
+    reason:
+      text: package.json 第3行 version=="0.3.0"，server.js 第140行 MCP Server 元数据
+        version=="0.3.0"，双向一致
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2：`CHANGELOG.md` 存在且含 v0.3.0 小节，覆盖鉴权加固与流式上传两个特性、修复清单与部署/回滚说明。
+    result: passed
+    reason:
+      text: CHANGELOG.md 含 [0.3.0] 小节，完整覆盖鉴权体系、流式上传（含 3GiB 实测 99s/32.5MB/s）、5
+        项修复清单、SEA 部署与回滚说明
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3：服务器 `/opt/ssh-mcp/releases/` 下存在 `ssh-mcp-server-linux-v0.3.0` 与
+      `SHA256SUMS`，产物 SHA256 与当前生产运行二进制一致。
+    result: passed
+    reason:
+      text: 10.0.0.11:/opt/ssh-mcp/releases/ 下产物与生产二进制、SHA256SUMS 三方 sha256 一致，均为
+        aa03bd1a141e060a546b64f76b894e7c01d4db33b1c167b1a0b99d0c320a28f9
+      truncated: false
+builder_handoff:
+  candidate_id: 9d5327b4-7f3e-4a71-af91-b16f34a85917
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:2bb33111-cc4f-4bd7-a130-ccedf4cff55d
+  iteration: 1
+  summary:
+    text: 版本包 v0.3.0：package.json 0.1.0→0.3.0（与 server.js 元数据对齐）；新增
+      CHANGELOG.md（0.3.0 鉴权加固+流式上传两特性、修复清单、部署/回滚说明；0.1.0 存档）；服务器
+      /opt/ssh-mcp/releases/ 归档 ssh-mcp-server-linux-v0.3.0 与
+      SHA256SUMS（aa03bd1a…，与生产运行中二进制一致）；归档合并后打注解 tag v0.3.0 推送。纯元数据变更，零功能代码改动。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+  checks:
+    - name:
+        text: 版本一致性
+        truncated: false
+      result: passed
+      note:
+        text: package.json version=0.3.0 == server.js MCP Server 元数据（grep 双向核对）
+        truncated: false
+    - name:
+        text: node test-http.js 回归
+        truncated: false
+      result: passed
+      note:
+        text: 全场景测试全绿（元数据改动未破坏功能）
+        truncated: false
+    - name:
+        text: 服务器产物固化
+        truncated: false
+      result: passed
+      note:
+        text: /opt/ssh-mcp/releases/ssh-mcp-server-linux-v0.3.0 + SHA256SUMS；产物 sha256
+          aa03bd1a…== 生产运行二进制；生产服务未重启未中断
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: git tag v0.3.0 在归档合并后于 main 上创建并推送（归档后部署动作，与既往 3GB 实测同先例）
+      truncated: false
+    - text: 本次为纯元数据 change，按协议跳过预审复核（可选项）
+      truncated: false
+  known_limits_truncated: false
+  review: null
+  submitted_at: 2026-09-22T02:29:54.947Z
+blockers: []
+verification:
+  candidate_id: 9d5327b4-7f3e-4a71-af91-b16f34a85917
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:59a4a006-00b2-4f6f-9bbd-2423adc7e9b4
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: v0.3.0 版本号双向一致，CHANGELOG 覆盖完整，服务器归档产物与生产二进制 SHA256 三方核对一致，全部验收项通过。
+    truncated: false
+  risks: []
+  risks_truncated: false
+  completed_at: 2026-09-22T02:32:33.873Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: v0.3.0 版本号双向一致，CHANGELOG 覆盖完整，服务器归档产物与生产二进制 SHA256 三方核对一致，全部验收项通过。
+      truncated: false
+    completed_at: 2026-09-22T02:32:33.873Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-22T02:26:56.567Z
