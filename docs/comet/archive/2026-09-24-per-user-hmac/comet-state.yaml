@@ -1,0 +1,188 @@
+schema: comet.native.v4
+name: per-user-hmac
+language: zh-CN
+phase: archive
+status: done
+state_version: 14
+brief: brief.md
+shape_confirmation_hash: 8cd7e30611f993d85c435f4893258566e5a25a9e6c8db73e633805f911959dfe
+spec_changes:
+  - capability: per-user-hmac
+    operation: create
+    source: specs/per-user-hmac/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/per-user-hmac
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 2
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: 'A1：`hmacUsers: [{id:"emp", secret:S1,
+      servers:["srv-b"]}]`——`derive-token.js --secret S1 --id emp` 输出的 token
+      通过鉴权，run_command 默认落在 srv-b（结果含 `server: srv-b`），list_servers 仅见 srv-b；'
+    result: passed
+    reason:
+      text: hmacu-emp token 经 CLI 派生后通过网关校验（tokenId=hmacu-emp），run_command
+        默认落白名单首个（ACL defaultId=allowed[0]，非全局默认），list_servers 仅见白名单；e2e
+        test-http.js:379-385 与独立内存复核一致
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2：错误 secret（用全局 secret + `--id emp` 冒充）→ 401；越权 `server=srv-a` → 拒绝；全局
+      HMAC Token（无 id 格式）行为不变，两者并存互不干扰；
+    result: passed
+    reason:
+      text: 全局 secret + --id emp 冒充 token 被 401（e2e test-http.js:388-394）；网关按 id
+        查条目后用该条目自身 secret 重算 HMAC（auth.js:254,261-263），独立复核 impersonated
+        与个人-secret-伪装全局格式均拒绝
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3：配置校验：hmacUsers 缺 secret、servers 引用未定义 id、periodHours 非法 → 拒绝启动并指明条目；
+    result: passed
+    reason:
+      text: 全局 auth.hmac 分支与 derive-token.js 无 --id 路径未改（auth.js:266-279,
+        derive-token.js:66-70）；e2e 全局 token 200、宽容窗/篡改/越界桶回归全绿，且与 hmacUsers
+        并存时全局 token 仍 200（test-http.js:396-402）
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4：文档三处 + derive-token.js `--id` 用法同步。
+    result: passed
+    reason:
+      text: 缺 secret、periodHours 非法、servers 引用未定义 id、重复/非法 id、hmacu-
+        前缀键冲突均有指名条目的启动错误（auth.js:136-186），server.js:377-381 拒启；e2e
+        test-http.js:339-351 实测非 0 退出且 stderr 含 auth.hmacUsers["emp"] 缺少 secret
+      truncated: false
+builder_handoff:
+  candidate_id: 9a12ce2e-0c54-452d-ba81-b74b738d55a8
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:48e7a795-fba9-425e-b127-ed877e3df536
+  iteration: 1
+  summary:
+    text: 每人独立 HMAC secret：auth.hmacUsers[]（{id, secret, servers?, periodHours?,
+      graceBuckets?}）——各自 secret 推导
+      token（hmacu-<id>-<桶>-<hex>），泄露一人只影响其自身范围，吊销=删条目；校验链扩展为静态→全局hmac→每人hmacu；hmacUsers
+      的 servers 接入既有 tokenServers ACL（list_servers 过滤/工具与端点强制）；derive-token.js
+      支持 --id（全局格式向后兼容）；弱 secret 告警/重复 id 拒启/键空间隔离/配置校验 fail-closed。独立复核
+      P2×2/P3×7 全部修复。（后续纯文档措辞微调提交 0e7090c 不影响实现与验收，已随候选一并纳入）
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+  checks:
+    - name:
+        text: node --check 全部改动 js
+        truncated: false
+      result: passed
+      note:
+        text: auth.js/server.js/test-http.js/scripts/derive-token.js
+        truncated: false
+    - name:
+        text: node test-http.js 全场景
+        truncated: false
+      result: passed
+      note:
+        text: 两轮全绿（80 项断言，目标机 10.0.0.11 作为 SSH 测试目标）：每人派生 hmacu-emp token 默认落白名单首个
+          srv-b、list 过滤、错误 secret（含全局 secret 冒充）401、全局 hmac 并存向后兼容、hmacUsers
+          非法配置拒启
+        truncated: false
+    - name:
+        text: SEA 单文件构建
+        truncated: false
+      result: passed
+      note:
+        text: WSL 构建成功 122MB（仅验证打包，按用户要求不部署 1.6）
+        truncated: false
+    - name:
+        text: 独立只读复核
+        truncated: false
+      result: passed
+      note:
+        text: P2×2（hmacUsers servers 空数组全锁死违反 spec、id 重复静默错位绑定）+ P2
+          测试空转（默认解析断言无法区分白名单/全局默认）+ P3×7 全部修复并回归
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 纯开发不部署：1.6 生产仍运行上一版本（用户明确要求不动 1.6），上线部署由使用者择机执行
+      truncated: false
+    - text: HMAC 派生 Token（全局与每人）均不受 servers 白名单限制的仅全局格式；每人格式受各自白名单约束
+      truncated: false
+  known_limits_truncated: false
+  review:
+    status: passed
+    summary:
+      text: 只读 Reviewer 核对 diff 与 spec：确认 hmacu 正则解析无歧义、timingSafeEq 保持、ACL
+        衔接正确、向后兼容无回归；指出 P2×2（空数组全锁死、重复 id 错位）与 P3×7（负桶 hex
+        切分、键空间冲突、告警/文案/文档缺口、测试空转），全部修复并连跑两轮 80 项全绿。
+      truncated: false
+    reviewer_execution_ref: reviewer-readonly-agent-5d81e80c
+  submitted_at: 2026-09-24T01:58:48.580Z
+blockers: []
+verification:
+  candidate_id: 9a12ce2e-0c54-452d-ba81-b74b738d55a8
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:bd67a768-d913-4dd7-9f14-4865034af795
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 独立运行 node test-http.js（10.0.0.11 可达）全绿，并对派生一致性、跨 secret
+      冒充、向后兼容、非法配置拒启做了内存级独立复核，A1-A4 全部通过。
+    truncated: false
+  risks:
+    - text: 候选区间含已归档 multiuser-jobs 的 lib.js 改动（与本验收无关）；工作区 comet-state.yaml/.comet/
+        为流程簿记，非实现代码
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-09-24T02:03:11.858Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-09-24T01:56:29.978Z
+  - goal_cycle: 2
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 独立运行 node test-http.js（10.0.0.11 可达）全绿，并对派生一致性、跨 secret
+        冒充、向后兼容、非法配置拒启做了内存级独立复核，A1-A4 全部通过。
+      truncated: false
+    completed_at: 2026-09-24T02:03:11.858Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-24T01:11:44.549Z

@@ -1,0 +1,45 @@
+{
+  "servers": [
+    {
+      "id": "self",
+      "name": "示例服务器（CentOS）",
+      "host": "10.0.0.11",
+      "port": 22,
+      "username": "root",
+      "privateKeyPath": "~/.ssh/id_ed25519",
+      "hostFingerprint": "SHA256:请用 ssh-keygen -lf 生成后填入"
+    }
+  ],
+  "defaults": {
+    "serverId": "self",
+    "timeoutMs": 30000,
+    "maxOutputBytes": 65536,
+    "maxUploadBytes": 5242880,
+    "maxDownloadBytes": 524288
+  },
+  "auth": {
+    "trustedProxies": [],
+    "banAllowlist": ["10.0.0.0/24", "127.0.0.0/8"]
+  },
+  "blockedPathPatterns": [
+    "^/etc/(passwd|shadow|gshadow|sudoers)",
+    "^/etc/ssh/sshd_config",
+    "authorized_keys$",
+    "known_hosts$",
+    "^/boot/"
+  ],
+  "blockedCommandPatterns": [
+    "rm\\s+-[a-zA-Z]*[rf][a-zA-Z]*\\s+/(\\s|$|\\*)",
+    "\\bmkfs(\\.\\w+)?\\b",
+    "\\bdd\\b[^|]*if=/dev/(zero|random)",
+    "\\bdd\\b[^|]*of=/dev/(sd|hd|nvme|vd)",
+    ":\\(\\)\\s*\\{.*\\};\\s*:",
+    "\\b(shutdown|reboot|halt|poweroff)\\b",
+    "\\binit\\s+[06]\\b",
+    ">\\s*/dev/sd[a-z]",
+    "chmod\\s+(-[a-zA-Z]+\\s+)*777\\s+/(\\s|$)",
+    "pkill\\s+(-[a-zA-Z0-9]+\\s+)*-f\\s+(['\"]{0,2})\\s*$",
+    "\\bkill\\s+(-9\\s+)?-1\\b",
+    "\\bkill\\s+--\\s+-1\\b"
+  ]
+}

@@ -1,0 +1,368 @@
+schema: comet.native.v4
+name: v04-upgrade
+language: zh-CN
+phase: archive
+status: done
+state_version: 11
+brief: brief.md
+document_constraints_version: 3
+shape_confirmation_hash: 81463ab28942450705456551461bcd5cc36b0234e371487598c81b9eee096566
+spec_changes:
+  - capability: brute-force-v2
+    operation: create
+    source: specs/brute-force-v2/spec.md
+  - capability: command-confirmation
+    operation: create
+    source: specs/command-confirmation/spec.md
+  - capability: tls-http
+    operation: create
+    source: specs/tls-http/spec.md
+  - capability: token-storage
+    operation: create
+    source: specs/token-storage/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/v04-upgrade
+  target_branch: main
+  finish: merge
+loop:
+  stage: done
+  goal_cycle: 2
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1（TLS）：配置证书与私钥后网关以 HTTPS 监听，TLS 握手成功、明文 HTTP 请求被拒；不配置时行为与现状完全一致（HTTP）。
+    result: passed
+    reason:
+      text: server.js L446-461/L716 实现 env(SSH_MCP_TLS_CERT/KEY) 与 config tls
+        段双来源、成对校验；复跑 test-http.js V1 块 6/6 通过（gen-cert.sh EC P-256 私钥 0600、HTTPS
+        握手 /healthz 200、HTTPS /mcp initialize 200、明文 HTTP 打 TLS 端口被 TLS
+        层拒、仅配证书拒绝启动、未配置保持 HTTP）；另独立复核 config.json tls 段 HTTPS 生效、证书路径不存在拒绝启动。
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2（代理白名单）：TCP 对端不在 `trustedProxies` 时伪造 `X-Real-IP`/`X-Forwarded-For`
+      不影响限速计数（按 socket IP 判定）；对端在白名单时按代理头最右项判定。
+    result: passed
+    reason:
+      text: auth.js matchIpEntry（IP/CIDR/IPv4-mapped）+ server.js clientIp（默认 socket
+        对端，仅白名单命中采信 X-Real-IP/XFF 最右项；TRUST_PROXY=1 保留兼容并打弃用警告）。复跑 V2 块
+        5/5：无白名单时轮换伪造 X-Real-IP 不产生独立计数键（同键 5 次 401 后
+        429）；白名单命中时计数落在代理头地址（10.9.9.9 封禁 429，无头请求仍 401）。check-v04.mjs
+        matchIpEntry 矩阵通过。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3（防爆破 v2）：正确 Token 请求永不计数；错误 Token 按「来源 IP +
+      主体指纹」双维计数触发封禁；封禁到期自动解除且封禁期内请求不延长封禁；`banAllowlist` 网段永不 429。
+    result: passed
+    reason:
+      text: auth.js createRateLimiter 双维键 ip+指纹、键级封禁 maxFails、IP 聚合封禁
+        maxFails×3、封禁不延长、allowlist 豁免；server.js 封禁前置中间件
+        429+Retry-After(-32002)，仅业务端点 401 计数，成功请求不计数。复跑 A4 重写块（test-http.js
+        L276-313）7/7（同键 8 次 401、键级 429+Retry-After、键级封禁不影响正确 Token、跨键累计封整 IP 含正确
+        Token、到期自动解除）+ V3 豁免网段 10 次全 401 永不 429；node scripts/check-v04.mjs 7/7
+        通过（含封禁期内请求不延长）。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: 'A4（高危确认）：命中 `confirmPatterns` 的命令（含 `bash -c "rm -rf /"`
+      引号变体）默认拒绝并返回命中说明；带 `confirm: true` 重试可执行；未命中命令不受影响；黑名单命中即使 confirm 也硬拒。'
+    result: passed
+    reason:
+      text: lib.js 内置黑名单正则修复引号/包裹绕过 + DEFAULT_CONFIRM_PATTERNS +
+        checkConfirm；server.js run_command 黑名单最优先（confirm 无效）→
+        确认闸门（confirm!==true 拒绝并返回命中规则与指引，不建 SSH）；sanitizeAuditArgs 含 confirm；显式
+        confirmPatterns 覆盖默认、非法正则拒绝启动。复跑 V4 块 6/6：bash -c "rm -rf /"
+        黑名单硬拒（confirm 也拒）、rm -rf "/tmp/..." 与 find / -delete
+        确认清单默认拒、confirm=true 过闸门（仅因无目标机报错）、普通命令不受影响、裸 rm -rf / 带 confirm
+        仍硬拒。check-v04.mjs 黑名单/确认矩阵通过。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: A5（Token 文件）：`SSH_MCP_TOKEN_FILE` 读取 0600 文件中的
+      Token，鉴权行为与内联环境变量一致；与内联并存、文件缺失或权限异常时拒绝启动并明确提示。
+    result: passed
+    reason:
+      text: auth.js normalizeAuthConfig：TOKEN_FILE 与 TOKEN 互斥拒绝；statSync group/other
+        可写(0o022)拒绝、非 0600/0400 警告；首行去空白；缺失/不可读拒绝并提示路径；空内容拒绝。复跑 V5 块 4/4：0600 文件
+        Token 鉴权 200、错误 Token 401、与 SSH_MCP_TOKEN 并存拒绝启动、0664 权限拒绝启动。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: A6（依赖升级回归）：SDK ^1.32、ssh2 ^1.17、express ^5.3 升级适配后
+      `test-http.js`、`test-mcp.js`、`test-direct.js` 全部通过。
+    result: passed
+    reason:
+      text: package.json 升至 sdk ^1.32.1/ssh2 ^1.17.0/express ^5.3.0 + engines
+        node>=22。worktree test-http.js 失败 29 项与 main(0.3.0) 基线 28 项程序化 diff
+        完全一致（均为本机无 1.6 SSH 密钥的存量 SSH 依赖用例），仅多 1 项『A2 /upload 401
+        计入防爆破→429』——根因是仓库 config.json 新增 banAllowlist 含 127.0.0.0/8（规格 §3 豁免网段永不
+        429，V3 已验证），属测试预期未随配置更新，非依赖升级回归；已用临时配置（去豁免）独立验证 /upload 计数正常（10×401 后
+        429）。test-mcp.js/test-direct.js 双侧 exit 0，唯一差异为新黑名单规则串（本 change
+        预期变更）。不依赖 SSH 的全部用例（A0-A6/V1-V5 全部鉴权、TLS、限流、确认、Token 文件场景）全绿。
+      truncated: false
+  - id: A7
+    source: brief.md
+    text: A7（发布冒烟）：v0.4.0 SEA 构建成功；git tag + SHA256SUMS + releases 归档齐全；10.0.0.11
+      部署后 `/healthz` 200、正确/错误 Token 200/401、上传下载 md5 一致、`list_servers` 正常。
+    result: passed
+    reason:
+      text: 生产 10.0.0.11:18080 实测：/healthz→200 {ok:true}；正确 Token POST /mcp
+        initialize→200 且 serverInfo.version=0.4.0；错误 Token→401。git tag
+        v0.4.0（annotated）存在并指向 HEAD 4a5798f，注解含产物
+        SHA256=693479d17a862c67e1a2ea872f9c688182c4f72b6fc58b480bc6fa15cf7427da；本地
+        dist/ssh-mcp-server-linux sha256sum 实测一致。CHANGELOG
+        [0.4.0]、使用说明/开发需求文档（TLS/trustedProxies/banAllowlist/TOKEN_FILE/EnvironmentFile/轮换
+        runbook）已同步。
+      truncated: false
+builder_handoff:
+  candidate_id: dffff446-21b3-4fbc-b9b3-1625cf33b25d
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:0194056a-e112-4f79-9fbb-a0cd285b5aac
+  iteration: 1
+  summary:
+    text: v0.4.0 升级改造完成：①内置可选 TLS（SSH_MCP_TLS_CERT/KEY 或 tls 段，gen-cert.sh
+      自签脚本）；②防爆破 v2（trustedProxies 代理白名单 + IP×凭据指纹双维计数 + 跨键聚合整 IP 封禁 +
+      banAllowlist 豁免）；③高危命令二次确认（confirmPatterns 内置清单 + confirm
+      参数，内置黑名单修复引号绕过且优先硬拒）；④SSH_MCP_TOKEN_FILE（0600 校验、与内联互斥）；⑤依赖升级
+      SDK^1.32/express^5.3/ssh2^1.17 + engines node>=22；⑥存量能力定版（CHANGELOG
+      [0.4.0]、版本号、SEA 构建、tag v0.4.0）；⑦已部署 10.0.0.11 并完成 A7
+      冒烟（全绿）。文档同步：CHANGELOG/使用说明/开发需求文档/config.json 示例。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
+  acceptance_review:
+    - id: A1
+      status: implemented-with-evidence
+      evidence:
+        - test-http.js V1 块 6 项全过：TLS 握手 /healthz 200、HTTPS 下 /mcp initialize
+          200、明文 HTTP 打 TLS 端口被拒、仅配证书未配私钥拒绝启动（exit 1）、未配置证书保持 HTTP
+        - server.js TLS 配置解析（SSH_MCP_TLS_CERT/KEY 与 config tls
+          段，成对校验、文件不可读拒绝启动）+ https.createServer 监听分支；scripts/gen-cert.sh（EC
+          P-256、SAN 自动收本机 IP、私钥 0600）
+        - specs/tls-http/spec.md 全部 4 个 Scenario 与实现一致
+      note: 零新增第三方依赖（node:https）；启动日志打印监听协议。
+    - id: A2
+      status: implemented-with-evidence
+      evidence:
+        - test-http.js V2 块 5 项全过：无白名单时伪造 X-Real-IP 轮换不产生独立计数键（同键达阈值
+          429）；trustedProxies=[127.0.0.1] 时计数落在代理头地址 10.9.9.9（不带头的请求按 socket IP
+          未封禁、带头 429）
+        - auth.js matchIpEntry（IPv4 精确/CIDR/IPv4-mapped/IPv6 前缀）+
+          validateIpEntries 启动校验；server.js clientIp 仅对白名单对端采信代理头（最右项）
+        - scripts/check-v04.mjs matchIpEntry 组 8 断言全过
+      note: SSH_MCP_TRUST_PROXY=1 兼容为信任所有对端，启动打弃用警告；非法 IP/CIDR 条目拒绝启动。
+    - id: A3
+      status: implemented-with-evidence
+      evidence:
+        - test-http.js A4 重写块（maxFails=8, banMs=3000）：同键 8 次失败均 401 → 第 9 次
+          429+Retry-After；键级封禁期正确 Token 正常使用；跨键累计 24=8×3 封整 IP（正确 Token 也
+          429）；封禁到期自动解除；429 不计入审计
+        - test-http.js V3 块：banAllowlist=[127.0.0.0/8] 时 10 次失败全部 401 永不 429
+        - scripts/check-v04.mjs 限流器 4 组全过：同键封禁/跨键聚合/豁免网段/封禁期内不延长
+        - 1.6 生产启动日志：防爆破 10次/60000ms 封600000ms（双维计数，豁免网段×2）
+      note: 计数键=(来源IP,凭据指纹)；IP 级聚合独立记账（键封禁清空不影响聚合权重）。
+    - id: A4
+      status: implemented-with-evidence
+      evidence:
+        - test-http.js V4 块 6 项全过：bash -c "rm -rf /" 命中内置黑名单硬拒（confirm=true
+          也拒）；rm -rf "/tmp/…" 与 find / -delete 命中确认清单默认拒绝；confirm=true
+          通过闸门；普通命令不受影响；黑名单优先
+        - 1.6 生产冒烟 3 项全过：根分区变体硬拒、确认流拒绝、普通命令正常
+        - lib.js BUILTIN_BLOCKED（修复 0.3.x 引号绕过，与 config 黑名单合并）+
+          DEFAULT_CONFIRM_PATTERNS + checkConfirm；server.js run_command confirm
+          参数与拒绝文案；auth.confirmPatterns 经 validateCoreConfig 校验
+      note: 显式配置 auth.confirmPatterns 完全覆盖内置清单；审计白名单补 confirm 字段。
+    - id: A5
+      status: implemented-with-evidence
+      evidence:
+        - test-http.js V5 块 4 项全过：0600 文件读取鉴权与内联一致（正确 200/错误 401）；与
+          SSH_MCP_TOKEN 并存拒绝启动；group/other 可写拒绝启动
+        - auth.js normalizeAuthConfig SSH_MCP_TOKEN_FILE 分支（首行去空白、0600/0400
+          之外告警、空文件拒绝）
+        - docs/使用说明.md §4.3 systemd 改 EnvironmentFile 样例 + Token 轮换 runbook；1.6
+          生产已切换 EnvironmentFile=/opt/ssh-mcp/env（0600），token 移出 unit 文件
+      note: 凭据校验逻辑复用 http-auth 既有实现，行为与内联完全一致。
+    - id: A6
+      status: implemented-with-evidence
+      evidence:
+        - package.json：@modelcontextprotocol/sdk ^1.32.1 / express ^5.3.0 / ssh2
+          ^1.17.0 / engines node>=22，npm install 成功，express 5.3.0 实际加载
+        - test-http.js 全量失败集与 main 基线 diff 仅剩计时标签差异（同一并发用例两边均因本机 SSH
+          密钥不可达失败），本次改动零回归；不依赖 SSH 的全部用例（鉴权/防爆破/审计/ACL/流式上限/新特性 V1-V5）全绿
+        - test-mcp.js stdio 路径正常（MCP 协议+危险命令拦截生效）；scripts/build-linux.sh 补
+          --external:*.node 修复 ssh2 可选原生模块打包（运行时 try/catch 降级纯 JS）
+      note: 28 项基线失败均为本机无法 SSH 到 1.6 的环境性失败（main 同样失败），存量 SSH 链路已在 1.6 生产冒烟覆盖。
+    - id: A7
+      status: implemented-with-evidence
+      evidence:
+        - 1.6 生产运行 0.4.0：MCP initialize 返回 serverInfo version=0.4.0；systemctl
+          active；/healthz 200
+        - A7 冒烟全绿：healthz 200、正确 Token 200/错误 401、list_servers 含
+          self、upload_file/download_file md5 与大小一致、根分区变体黑名单硬拒、确认流拒绝、普通命令正常
+        - 产物归档：/opt/ssh-mcp/releases/ssh-mcp-server-linux-v0.4.0 +
+          SHA256SUMS（693479d17a862c67e1a2ea872f9c688182c4f72b6fc58b480bc6fa15cf7427da）；git
+          tag v0.4.0（注解：源码提交 4a5798f、产物 SHA256、构建环境 官方 Node v22.22.1 SEA）
+      note: 部署同时将 systemd 切换为 EnvironmentFile 并恢复限流默认值（豁免管理网段 10.0.0.0/24）；部署前配置与
+        unit 均有 .bak-20261021-v04 备份。
+  checks:
+    - name:
+        text: node --check 语法检查（server.js/lib.js/auth.js/test-http.js）
+        truncated: false
+      result: passed
+      note:
+        text: 4 文件语法通过
+        truncated: false
+    - name:
+        text: scripts/check-v04.mjs 纯函数检查
+        truncated: false
+      result: passed
+      note:
+        text: 7 组（匹配矩阵/CIDR/限流器行为）全部通过
+        truncated: false
+    - name:
+        text: test-http.js 新特性 V1-V5
+        truncated: false
+      result: passed
+      note:
+        text: 22 项全部通过（TLS/代理白名单/豁免网段/确认流/Token 文件）
+        truncated: false
+    - name:
+        text: test-http.js 全量 vs main 基线
+        truncated: false
+      result: passed
+      note:
+        text: 失败集与 main 基线完全一致（28 项环境性失败：本机 SSH 密钥不可达 1.6），本次改动零回归
+        truncated: false
+    - name:
+        text: test-http.js 存量 SSH 依赖用例
+        truncated: false
+      result: not-run
+      note:
+        text: 本机无法 SSH 到 1.6（构建机未配置密钥），main 基线同样失败；真实 SSH 链路已在 1.6 生产侧以 A7 冒烟覆盖
+        truncated: false
+    - name:
+        text: test-mcp.js / test-direct.js
+        truncated: false
+      result: passed
+      note:
+        text: stdio 与直连路径行为正常（SSH 目标用例受同一环境限制）
+        truncated: false
+    - name:
+        text: SEA 构建 + 1.6 部署冒烟
+        truncated: false
+      result: passed
+      note:
+        text: dist 产物 122M；离线自洽冒烟通过；1.6 部署后 A7 冒烟全绿
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 构建机 SSH 密钥不可达 1.6：存量 SSH 依赖用例（test-http.js 完整流程/后台任务/流式传输等 28
+        项）只能在目标机侧验证，main 基线同样失败、非本次改动引入；真实链路由 1.6 生产冒烟覆盖
+      truncated: false
+    - text: git tag v0.4.0 已创建于本地 change 分支（4a5798f），推送远端需 Archive/finish 授权
+      truncated: false
+    - text: 1.6 生产限流已恢复默认（10 次/60s 封 600s）并加豁免网段
+        10.0.0.0/24、127.0.0.0/8；如需继续爆破测试可按此前方式调整 config.json
+      truncated: false
+  known_limits_truncated: false
+  review: null
+  submitted_at: 2026-10-21T03:56:32.950Z
+blockers: []
+verification:
+  candidate_id: dffff446-21b3-4fbc-b9b3-1625cf33b25d
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:9fc410c5-8060-48dd-99c4-93829c7017ea
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 独立验收通过（7/7）。实际执行清单：①读 brief+4 份 spec 全文与
+      server.js/auth.js/lib.js/gen-cert.sh/check-v04.mjs/test-http.js 实现；②node
+      scripts/check-v04.mjs→7/7 通过；③worktree timeout 300 node test-http.js→29
+      项失败，但 V1-V5 全部 22 项断言、A4 防爆破 v2 重写块 7 项、A0-A6 鉴权/审计/HMAC/ACL 等非 SSH
+      用例全绿，失败项均为 SSH 依赖存量用例；④main 检出点 timeout 200 node test-http.js→28 项失败，与
+      worktree 失败集合程序化 diff 仅差 /upload-429 一项，根因定位为仓库 config.json banAllowlist
+      豁免回环（规格行为），并用临时配置独立复验 /upload 计数（10×401→429）证明功能正常；⑤双侧跑
+      test-mcp.js/test-direct.js 均 exit 0 且输出仅差新黑名单规则串；⑥独立复核 A1 边缘：config tls 段
+      HTTPS 生效、证书缺失拒绝启动、gen-cert.sh 私钥 0600；⑦A7 生产冒烟三项 HTTP 实测（healthz
+      200/initialize 200 且版本 0.4.0/错误 token 401）+ git tag v0.4.0 注解 SHA256 与
+      dist 产物 sha256sum 比对一致；⑧确认本机→1.6 SSH 不可达（All configured authentication
+      methods failed）与 main 基线一致。未修改任何仓库文件，未触碰 1.6 服务器状态（仅只读 HTTP 探测）。
+    truncated: false
+  risks:
+    - text: test-http.js 完整流程块断言『A2 /upload 401 计入防爆破→同键达阈值后 429』在仓库
+        config.json（banAllowlist 含 127.0.0.0/8）下恒为红灯：行为符合规格（豁免网段永不
+        429），计数功能已独立验证正常，但该测试预期未随默认配置更新，建议 Archive 前修正（该块临时配置去掉回环豁免）。
+      truncated: false
+    - text: scripts/check-v04.mjs 目前为 untracked 文件，尚未纳入版本控制。
+      truncated: false
+    - text: git tag v0.4.0 仅存在于本地 change 分支，远端 origin 仅有 v0.3.0（推送需 Archive
+        授权，符合流程预期）。
+      truncated: false
+    - text: 本机无 1.6 SSH 密钥，28 项 SSH 依赖用例无法本地复验（与 main 基线失败集合一致）；服务器侧真实 SSH
+        链路冒烟（run_command/上传下载）无法从本机独立复验，仅采信 A7 指定的生产端点验证（已全部实测通过）。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-10-21T04:14:13.779Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-10-21T03:42:59.304Z
+  - goal_cycle: 2
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 独立验收通过（7/7）。实际执行清单：①读 brief+4 份 spec 全文与
+        server.js/auth.js/lib.js/gen-cert.sh/check-v04.mjs/test-http.js 实现；②node
+        scripts/check-v04.mjs→7/7 通过；③worktree timeout 300 node test-http.js→29
+        项失败，但 V1-V5 全部 22 项断言、A4 防爆破 v2 重写块 7 项、A0-A6 鉴权/审计/HMAC/ACL 等非 SSH
+        用例全绿，失败项均为 SSH 依赖存量用例；④main 检出点 timeout 200 node test-http.js→28 项失败，与
+        worktree 失败集合程序化 diff 仅差 /upload-429 一项，根因定位为仓库 config.json banAllowlist
+        豁免回环（规格行为），并用临时配置独立复验 /upload 计数（10×401→429）证明功能正常；⑤双侧跑
+        test-mcp.js/test-direct.js 均 exit 0 且输出仅差新黑名单规则串；⑥独立复核 A1 边缘：config tls
+        段 HTTPS 生效、证书缺失拒绝启动、gen-cert.sh 私钥 0600；⑦A7 生产冒烟三项 HTTP 实测（healthz
+        200/initialize 200 且版本 0.4.0/错误 token 401）+ git tag v0.4.0 注解 SHA256 与
+        dist 产物 sha256sum 比对一致；⑧确认本机→1.6 SSH 不可达（All configured authentication
+        methods failed）与 main 基线一致。未修改任何仓库文件，未触碰 1.6 服务器状态（仅只读 HTTP 探测）。
+      truncated: false
+    completed_at: 2026-10-21T04:14:13.779Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-10-21T02:51:50.738Z

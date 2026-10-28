@@ -1,0 +1,194 @@
+schema: comet.native.v4
+name: stream-upload
+language: zh-CN
+phase: archive
+status: done
+state_version: 9
+brief: brief.md
+shape_confirmation_hash: fc0c93a8b38cc550fe21400b9ca10c56bfe9827f9b727f7b99bad47e0641a1be
+spec_changes:
+  - capability: stream-upload
+    operation: create
+    source: specs/stream-upload/spec.md
+workspace:
+  isolation: worktree
+  change_branch: comet/stream-upload
+  target_branch: main
+  finish: keep
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1（流式上传全流程）：对可达服务器的网关，POST 8MB 随机数据到 `/upload?path=/tmp/x.bin`，返回 200
+      `{ok:true, bytes, md5}` 且 bytes/md5 与本地计算一致；`mode=0600` 生效。
+    result: passed
+    reason:
+      text: 独立运行 node test-http.js：8MB 随机数据 /upload 返回 200、bytes/md5 与本地一致、stat 确认
+        mode=0600（test-http.js:392-405；lib.js:306-421/394/397，server.js:443）
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2（鉴权与审计）：错误 token 调 `/upload` 返回 401 且计入防爆破失败数；成功/失败调用在审计中产生
+      `tool:"upload_stream"` 条目（含 bytes，不含文件内容）。
+    result: passed
+    reason:
+      text: /upload 错误 token 401 计入防爆破、达阈值后
+        429（server.js:342-344；test-http.js:416-424），审计 upload_stream 条目含
+        bytes/md5/tokenId 且无文件内容（server.js:414-415/441；test-http.js:408-413）
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3（上限控制）：`Content-Length` 超过 `maxStreamUploadBytes` 即刻 413（不建立 SSH
+      连接）；流中超限返回 413 且远端半截文件被清理（不留残片）。
+    result: passed
+    reason:
+      text: Content-Length 预检 413 不建 SSH（server.js:431-437）、chunked 流中超限 413
+        且远端残片清理（lib.js:410-414/339-346；test-http.js:327-337）、path/mode/黑名单
+        400（server.js:417-429；test-http.js:301-306）全部实测通过
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4（MCP 路径修复）：HTTP 模式下经 `upload_file` 上传 200KB 文件（JSON 请求体约 273KB > 旧默认
+      100KB 限制）成功。
+    result: passed
+    reason:
+      text: express.json limit 按 maxUploadBytes*1.4+256KB 动态计算且仅挂
+        /mcp（server.js:315/358），HTTP 模式 MCP upload_file 200KB（body 约 273KB>旧
+        100KB 限）实测成功（test-http.js:373-378）
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: A5（文档与配置）：`maxStreamUploadBytes`、curl 示例、Nginx 说明写入三份文档；FR8 入开发需求文档。
+    result: passed
+    reason:
+      text: maxStreamUploadBytes=3GiB（lib.js:51）与 curl/Nginx 说明写入
+        README.md:145-174/238、docs/使用说明.md §6.5+§7.6、FR8+断点续传写入
+        docs/开发需求文档.md:118-132/178，均 grep 检索确认
+      truncated: false
+builder_handoff:
+  candidate_id: 6bfd4806-a115-4998-a586-deb8622e3109
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:5cdb5715-d0e9-4baa-9e90-c339eca73994
+  iteration: 1
+  summary:
+    text: 大文件流式上传：新增 POST/PUT /upload 端点（查询参数 path/server/mode；请求体直接管道到目标机
+      SFTP，恒定内存不落网关盘；默认上限 defaults.maxStreamUploadBytes=3GiB 可配；Content-Length
+      预检 + 流式计数双重上限；超限/中断清理远端半截文件；远端 md5sum 校验；复用
+      Bearer/防爆破/审计）。配套修复：express.json 收窄到 /mcp 且上限与 maxUploadBytes 挂钩（修复 HTTP
+      模式 base64 上传被默认 100KB 挡住 + /upload 带 JSON 头被吞成 0 字节）；chmod 八进制
+      bug（uploadFile/upload_stream 的 mode 参数）；server.requestTimeout=0
+      支持长传输。独立复核发现 P1×1/P2×3/P3×7 全部修复并连跑两轮全绿。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+  checks:
+    - name:
+        text: node --check 全部改动 js
+        truncated: false
+      result: passed
+      note:
+        text: lib.js/server.js/test-http.js
+        truncated: false
+    - name:
+        text: node test-http.js 全场景（目标机 10.0.0.11 真实服务器）
+        truncated: false
+      result: passed
+      note:
+        text: 40 项断言连跑两轮全绿：A1 8MB 流式上传 md5 比对+mode=0600、A2 审计 upload_stream/401 计数到
+          429、A3 Content-Length 413+chunked 流中超限+残片清理+黑名单拦截+path/mode 校验、A4 MCP
+          200KB（HTTP body 超 100KB 旧限）、A5 文档
+        truncated: false
+    - name:
+        text: SEA 单文件构建
+        truncated: false
+      result: passed
+      note:
+        text: WSL 构建成功 122MB
+        truncated: false
+    - name:
+        text: 独立只读复核
+        truncated: false
+      result: passed
+      note:
+        text: P1-1 两条中断路径 Promise 挂起（入口接管断连事件+看门狗+safeExec 兜底）、P2-1 express.json 吞
+          /upload 体（收窄到 /mcp）、P2-2 /upload 补敏感路径黑名单、P2-3 空闲看门狗、P3 若干（审计
+          md5/误删旧文件/魔法串/配置校验/测试缺口/config.json.bak 混入），全部修复
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 3GB 级真实传输的最终实测在部署到 10.0.0.11 后执行（本地仅 8MB 级自动化）
+      truncated: false
+    - text: requestTimeout=0 为全局开关，/mcp 的停滞连接依赖 headersTimeout（60s）与客户端超时防护
+      truncated: false
+    - text: 上传断点续传/分块为后续规划（FR8 非目标）
+      truncated: false
+  known_limits_truncated: false
+  review:
+    status: passed
+    summary:
+      text: 只读 Reviewer 核对 spec 与 diff：确认 chmod 修复正确（八进制串直传 + parseInt 保留在 SFTP open
+        语义）、背压成立、finish 幂等、鉴权/防爆破/审计复用完整、向后兼容（默认 3GiB 上限、/mcp 不变）；指出 P1-1 挂起路径与
+        P2 吞体/黑名单缺失等问题，全部修复后回归通过。
+      truncated: false
+    reviewer_execution_ref: reviewer-readonly-agent-96ef1098
+  submitted_at: 2026-09-21T14:21:28.942Z
+blockers: []
+verification:
+  candidate_id: 6bfd4806-a115-4998-a586-deb8622e3109
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:4ffe4f03-758b-4c59-8b68-e26b5d2fed1c
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 两轮独立运行 node test-http.js 全绿（46 项断言，含 10.0.0.11 真实服务器的完整流程与流中场景），A1-A5
+      五项验收全部通过，仅余 3GiB 实机全量比对为部署后遗留动作。
+    truncated: false
+  risks:
+    - text: rmPartial 以 sleep 0.3 兜底清理迟到残片（lib.js:344），极端慢盘下理论上可能残留 0 字节文件（本轮实测清理成功）
+      truncated: false
+    - text: 真实 3GiB 传输未在测试中执行（仅 8MB），brief 验证预期中的 3GiB 实机 md5 比对为部署后遗留动作
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-09-21T14:25:12.317Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 两轮独立运行 node test-http.js 全绿（46 项断言，含 10.0.0.11 真实服务器的完整流程与流中场景），A1-A5
+        五项验收全部通过，仅余 3GiB 实机全量比对为部署后遗留动作。
+      truncated: false
+    completed_at: 2026-09-21T14:25:12.317Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-09-21T13:33:53.779Z

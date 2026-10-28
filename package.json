@@ -1,0 +1,26 @@
+{
+  "name": "ssh-mcp-server",
+  "version": "0.4.1",
+  "description": "轻量 SSH MCP 服务器：AI 通过 MCP 协议在远程服务器上执行 SSH 命令",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lvxiangjin/ssh-mcp-server.git"
+  },
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:http": "SSH_MCP_TRANSPORT=http node server.js",
+    "test:direct": "node test-direct.js",
+    "test:mcp": "node test-mcp.js",
+    "test:http": "node test-http.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "express": "^5.3.0",
+    "ssh2": "^1.17.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

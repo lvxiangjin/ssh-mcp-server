@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.log
+nohup.out
+config.json.bak
+# 工具本地文件（Comet/ZCode/Codex 配置，不入库）
+/.agents/
+/.codex/
+# >>> Comet managed project state >>>
+!/.comet/
+/.comet/*
+!/.comet/config.yaml
+# <<< Comet managed project state <<<
+
+# Comet change 工作树目录
+/.worktrees/
+
+# 内部运维与真实环境配置，不入库（开源仓库只保留 example）
+AGENTS.md
+config.json
+server-config.json
+*.secret
+*.token

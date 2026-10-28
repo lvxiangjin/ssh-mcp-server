@@ -1,0 +1,36 @@
+{
+  "servers": [
+    {
+      "id": "self",
+      "name": "示例服务器（网关本机）",
+      "host": "127.0.0.1",
+      "port": 22,
+      "username": "root",
+      "privateKeyPath": "/root/.ssh/id_ed25519",
+      "hostFingerprint": "SHA256:请用 ssh-keygen -lf 生成后填入"
+    }
+  ],
+  "defaults": {
+    "serverId": "self",
+    "timeoutMs": 30000,
+    "maxOutputBytes": 65536,
+    "maxUploadBytes": 5242880,
+    "maxDownloadBytes": 524288
+  },
+  "blockedPathPatterns": [
+    "^/etc/(passwd|shadow|gshadow|sudoers)",
+    "^/etc/ssh/sshd_config",
+    "authorized_keys$",
+    "known_hosts$",
+    "^/boot/"
+  ],
+  "blockedCommandPatterns": [
+    "rm\\s+-[a-zA-Z]*[rf][a-zA-Z]*\\s+/(\\s|$|\\*)",
+    "\\bmkfs(\\.\\w+)?\\b",
+    "\\bdd\\b[^|]*if=/dev/(zero|random)",
+    ":\\(\\)\\s*\\{.*\\};\\s*:",
+    "\\b(shutdown|reboot|halt|poweroff)\\b",
+    "\\binit\\s+[06]\\b",
+    ">\\s*/dev/sd[a-z]"
+  ]
+}
